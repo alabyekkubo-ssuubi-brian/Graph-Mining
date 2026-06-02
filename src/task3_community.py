@@ -42,15 +42,50 @@ def run_louvain(G, seed=42):
     return partition, modularity, comm_sizes
 
 
-def build_gn_subgraph(G, max_nodes):
-    """Largest connected component restricted to its highest-degree nodes."""
+def build_gn_subgraph(G, max_nodes, mode="ego", seed=42):
+    """
+    Build a subgraph for Girvan-Newman.
+
+    mode="ego"  : a BFS region grown from a moderately-connected seed node.
+                  This preserves natural community structure, so GN can find
+                  meaningful communities and the Louvain-vs-GN comparison is fair.
+    mode="hubs" : the highest-degree nodes. This is the densely interconnected
+                  "elite core"; GN struggles here, which is itself a finding.
+
+    Returns the largest connected component of the chosen subgraph.
+    """
+    import random
+    rng = random.Random(seed)
     lcc = max(nx.connected_components(G), key=len)
     Gc = G.subgraph(lcc)
     if Gc.number_of_nodes() <= max_nodes:
         return Gc.copy()
-    top_nodes = [n for n, _ in sorted(Gc.degree(), key=lambda x: x[1], reverse=True)[:max_nodes]]
-    H = Gc.subgraph(top_nodes).copy()
-    # Keep only the largest component of the induced subgraph so GN is well behaved.
+
+    if mode == "hubs":
+        nodes = [n for n, _ in sorted(Gc.degree(), key=lambda x: x[1], reverse=True)[:max_nodes]]
+    else:  # ego / BFS region
+        # Seed from a node of moderate degree (around the 75th percentile) so the
+        # region is connected but not dominated by a single mega-hub.
+        degs = sorted(Gc.degree(), key=lambda x: x[1])
+        seed_node = degs[int(len(degs) * 0.75)][0]
+        # Grow a BFS frontier until we reach max_nodes.
+        visited = {seed_node}
+        frontier = [seed_node]
+        while frontier and len(visited) < max_nodes:
+            nxt = []
+            for u in frontier:
+                for w in Gc.neighbors(u):
+                    if w not in visited:
+                        visited.add(w)
+                        nxt.append(w)
+                        if len(visited) >= max_nodes:
+                            break
+                if len(visited) >= max_nodes:
+                    break
+            frontier = nxt
+        nodes = list(visited)
+
+    H = Gc.subgraph(nodes).copy()
     H = H.subgraph(max(nx.connected_components(H), key=len)).copy()
     return H
 
@@ -112,6 +147,9 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--gn-nodes", type=int, default=400,
                         help="Max nodes for the Girvan-Newman subgraph.")
+    parser.add_argument("--gn-mode", choices=["ego", "hubs"], default="ego",
+                        help="ego = natural BFS region (clean communities); "
+                             "hubs = highest-degree elite core (a finding in itself).")
     args = parser.parse_args()
 
     G = load_graph()
@@ -138,7 +176,7 @@ def main():
     )
 
     # ---- Girvan-Newman (subgraph) ----
-    H = build_gn_subgraph(G, args.gn_nodes)
+    H = build_gn_subgraph(G, args.gn_nodes, mode=args.gn_mode)
     gn = run_girvan_newman(H, max_communities=12)
     gn_partition = {}
     for cid, comm in enumerate(gn["communities"]):
@@ -147,30 +185,51 @@ def main():
     gn_sizes = sorted((len(c) for c in gn["communities"]), reverse=True)
 
     print("\n=== Girvan-Newman (subgraph) ===")
-    print(f"Subgraph size ...... {H.number_of_nodes()} nodes")
+    print(f"Subgraph mode ...... {args.gn_mode}")
+    print(f"Subgraph size ...... {H.number_of_nodes()} nodes, {H.number_of_edges()} edges")
     print(f"Communities ........ {gn['k']}")
     print(f"Modularity ......... {gn['modularity']:.4f}")
     print(f"Sizes .............. {gn_sizes}")
 
+    # Fair comparison: run Louvain on the SAME subgraph so the two algorithms are
+    # compared on identical input, not full-graph vs subgraph.
+    sub_part = community_louvain.best_partition(H, random_state=42)
+    sub_mod_louvain = community_louvain.modularity(sub_part, H)
+    sub_n_louvain = len(set(sub_part.values()))
+    print(f"\n=== Louvain on the SAME subgraph (for fair comparison) ===")
+    print(f"Communities ........ {sub_n_louvain}")
+    print(f"Modularity ......... {sub_mod_louvain:.4f}")
+
     visualize_partition(
         H, gn_partition,
         os.path.join(OUT_DIR, "task3_girvan_newman_communities.png"),
-        f"Girvan-Newman communities on subgraph (Q={gn['modularity']:.3f}, {gn['k']} communities)",
+        f"Girvan-Newman ({args.gn_mode} subgraph) Q={gn['modularity']:.3f}, {gn['k']} communities",
+        max_nodes=args.gn_nodes,
+    )
+    visualize_partition(
+        H, sub_part,
+        os.path.join(OUT_DIR, "task3_louvain_subgraph_communities.png"),
+        f"Louvain (same {args.gn_mode} subgraph) Q={sub_mod_louvain:.3f}, {sub_n_louvain} communities",
         max_nodes=args.gn_nodes,
     )
 
     summary = {
-        "louvain": {
+        "louvain_full_graph": {
             "num_communities": n_comm_louvain,
             "modularity": mod_louvain,
             "size_distribution_top20": size_list_louvain[:20],
-            "scope": "full graph",
+            "scope": "full graph (the headline partition)",
         },
-        "girvan_newman": {
+        "girvan_newman_subgraph": {
             "num_communities": gn["k"],
             "modularity": gn["modularity"],
             "size_distribution": gn_sizes,
-            "scope": f"subgraph of {H.number_of_nodes()} highest-degree LCC nodes",
+            "scope": f"{args.gn_mode} subgraph of {H.number_of_nodes()} nodes / {H.number_of_edges()} edges",
+        },
+        "louvain_same_subgraph": {
+            "num_communities": sub_n_louvain,
+            "modularity": sub_mod_louvain,
+            "scope": "Louvain re-run on the identical GN subgraph for a fair head-to-head",
         },
     }
     with open(os.path.join(OUT_DIR, "task3_community_summary.json"), "w") as fh:

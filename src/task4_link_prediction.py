@@ -174,6 +174,40 @@ def main():
         json.dump(results, fh, indent=2)
     print(f"\nSaved results -> {os.path.join(OUT_DIR, 'task4_link_prediction.json')}")
 
+    # ---- ROC and Precision-Recall curves (standard for link prediction) ----
+    try:
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+        from sklearn.metrics import roc_curve, precision_recall_curve
+
+        fpr, tpr, _ = roc_curve(y_test, proba)
+        prec, rec, _ = precision_recall_curve(y_test, proba)
+
+        fig, axes = plt.subplots(1, 2, figsize=(13, 5.5))
+        axes[0].plot(fpr, tpr, color="#C44E52", lw=2,
+                     label=f"ROC (AUC={results['roc_auc']:.3f})")
+        axes[0].plot([0, 1], [0, 1], "k--", lw=1, alpha=0.5)
+        axes[0].set_xlabel("False positive rate")
+        axes[0].set_ylabel("True positive rate")
+        axes[0].set_title("ROC curve")
+        axes[0].legend(loc="lower right")
+
+        axes[1].plot(rec, prec, color="#4C72B0", lw=2,
+                     label=f"PR (AP={results['average_precision']:.3f})")
+        axes[1].set_xlabel("Recall")
+        axes[1].set_ylabel("Precision")
+        axes[1].set_title("Precision-Recall curve")
+        axes[1].legend(loc="lower left")
+
+        fig.suptitle("Link prediction performance (held-out test edges)", fontsize=13)
+        fig.tight_layout()
+        fig.savefig(os.path.join(OUT_DIR, "task4_roc_pr_curves.png"), dpi=150)
+        plt.close(fig)
+        print("Saved curves  -> outputs/task4_roc_pr_curves.png")
+    except Exception as e:
+        print(f"[task4] plotting skipped: {e}")
+
 
 if __name__ == "__main__":
     main()
