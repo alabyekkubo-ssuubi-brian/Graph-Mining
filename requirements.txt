@@ -1,0 +1,7 @@
+networkx>=3.0
+python-louvain>=0.16
+scikit-learn>=1.2
+numpy>=1.24
+pandas>=1.5
+scipy>=1.10
+matplotlib>=3.6
