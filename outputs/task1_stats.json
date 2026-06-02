@@ -1,0 +1,11 @@
+{
+  "num_nodes": 22470,
+  "num_edges": 170823,
+  "density": 0.0006766896339778271,
+  "num_connected_components": 1,
+  "largest_cc_size": 22470,
+  "largest_cc_fraction": 1.0,
+  "avg_degree": 15.204539385847797,
+  "max_degree": 709,
+  "min_degree": 1
+}
