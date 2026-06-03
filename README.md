@@ -1,11 +1,15 @@
 # Project 2 — Graph Mining: Facebook Large Page-Page Network
 
+ALABYEKKUBO SSUUBI BRIAN
+AYEBALE LINDA KELLEN
+
+
 Graph-mining analysis of the **Facebook Large Page-Page Network** (SNAP / MUSAE):
 an undirected graph of ~22,470 official Facebook pages (nodes) connected by mutual
 likes (edges), labelled into four categories — politicians, governmental
 organisations, TV shows, and companies.
 
-This repository implements all four required tasks:
+This repository implements all four required tasks for the data mining project.:
 
 | Task | File | What it does |
 |------|------|--------------|
